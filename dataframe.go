@@ -12,6 +12,8 @@ var dataFrameMagicWord = [...]byte{ 0xaa, 0xde, 0x07, 0xa6, 0x02, 0x57, 0xc2, 0x
 type  DataFrame interface {
 	// Returns true when data frame is fully captured
 	IsFullFrame() bool
+	// Decodes captured data frame
+	Decode(receiver interface{}) error
 	// Capture data stream into a data frame
 	Capture(buf []byte)
 	// Returns data frame
@@ -82,6 +84,16 @@ func (f *dataFrame) GetFrame() []byte {
 	copy(out[0:], f.buf[0:])
 	f.isFull = false
 	return out
+}
+
+func (f *dataFrame) Decode(receiver interface{}) error {
+	if ! f.isFull {
+		panic("trying to decode incomplete data frame")
+	}
+	buf := bytes.NewBuffer(f.GetFrame())
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(receiver)
+	return err
 }
 
 func (f *dataFrame) Flush() []byte {

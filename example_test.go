@@ -2,7 +2,6 @@ package netdataframe_test
 
 import (
 	"bytes"
-	"encoding/gob"
 	netdataframe "github.com/AgentCoop/net-dataframe"
 	"math/rand"
 	"testing"
@@ -79,12 +78,8 @@ func transferPayload(input ...*Payload) []*Payload {
 	for i := 0; i < len(pivots) - 1; i++ {
 		df.Capture(data[pivots[i]:pivots[i+1]])
 		if df.IsFullFrame() {
-			dataFrame := df.GetFrame()
-			fbuf := bytes.NewBuffer(dataFrame)
-			dec := gob.NewDecoder(fbuf)
-
 			recvPayload := &Payload{}
-			err := dec.Decode(recvPayload)
+			err := df.Decode(recvPayload)
 			if err != nil { panic(err) }
 			output[j] = recvPayload
 			j++

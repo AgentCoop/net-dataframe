@@ -9,7 +9,10 @@ facilitate that.
 type DataFrame interface {
     // Returns true when data frame is fully captured 
     IsFullFrame() bool
-	
+
+    // Decodes captured data frame
+    Decode(receiver interface{}) error
+
     // Capture data stream into a data frame 
     Capture(buf []byte)
 	
@@ -53,10 +56,7 @@ type DataFrame interface {
     df.Capture(readbuf[0:n])
     if df.IsFullFrame() {
         // Say hello
-        fbuf := bytes.NewBuffer(dataFrame)
-        dec := gob.NewDecoder(fbuf)
-        req := &Request{}
-        err := dec.Decode(req)
+        err := df.Decode(req)
         if err != nil { panic(err) }
         fmt.Printf(req.msg) // hello
     }
