@@ -9,6 +9,19 @@ import (
 // head -c 8 /dev/urandom | hexdump -C
 var dataFrameMagicWord = [...]byte{ 0xaa, 0xde, 0x07, 0xa6, 0x02, 0x57, 0xc2, 0xd0 }
 
+type  DataFrame interface {
+	// Returns true when data frame is fully captured
+	IsFullFrame() bool
+	// Capture data stream into a data frame
+	Capture(buf []byte)
+	// Returns data frame
+	GetFrame() []byte
+	// Resets frame capturing returning captured before data
+	Flush() []byte
+	// Converts data into a frame using gob encoding
+	ToFrame(data interface{}) []byte
+}
+
 type dataFrame struct {
 	buf      []byte
 	tail     int
@@ -24,10 +37,6 @@ func NewDataFrame() *dataFrame {
 
 func (f *dataFrame) IsFullFrame() bool {
 	return f.isFull
-}
-
-func (f *dataFrame) isFrame() bool {
-	return f.tail > 0
 }
 
 func (f *dataFrame) Capture(data []byte) {
@@ -76,11 +85,11 @@ func (f *dataFrame) GetFrame() []byte {
 }
 
 func (f *dataFrame) Flush() []byte {
+	out := make([]byte, len(f.buf))
+	copy(out[0:], f.buf[0:])
 	f.tail = 0
 	f.tailbuf = nil
 	f.isFull = false
-	out := make([]byte, len(f.buf))
-	copy(out[0:], f.buf[0:])
 	return out
 }
 
@@ -107,14 +116,10 @@ func (f *dataFrame) ToFrame(data interface{}) ([]byte, error) {
 }
 
 func (f *dataFrame) probe(buf []byte) bool {
-	if len(buf) < len(dataFrameMagicWord) {
-		return false
-	}
+	if len(buf) < len(dataFrameMagicWord) { return false }
 
 	for i := 0; i < len(dataFrameMagicWord); i++ {
-		if buf[i] != dataFrameMagicWord[i] {
-			return false
-		}
+		if buf[i] != dataFrameMagicWord[i] { return false }
 	}
 
 	return true
