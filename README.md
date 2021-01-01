@@ -4,9 +4,9 @@ into a single TCP packet, hence there is a strong need to re-assemble received p
 a single data frame taking into account packet fragmentation. This Go library is meant to
 facilitate that.
 
-## API
+### API
 ```go
-type DataFrame interface {
+type DataFrameInterface interface {
     // Returns true when data frame is fully captured 
     IsFullFrame() bool
 
@@ -14,7 +14,7 @@ type DataFrame interface {
     Decode(receiver interface{}) error
 
     // Capture data stream into a data frame 
-    Capture(buf []byte)
+    Capture(buf []byte) error
 	
     // Returns data frame 
     GetFrame() []byte
@@ -27,7 +27,7 @@ type DataFrame interface {
 }
 ```
 
-## How to use
+### How to use
 ```go
     //
     // Client

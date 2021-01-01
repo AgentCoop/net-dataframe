@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
+	"errors"
 )
 
 // head -c 8 /dev/urandom | hexdump -C
@@ -15,22 +16,22 @@ const (
 	ForewordLen = MagicWordLen + DataFrameLen
 )
 
-type  DataFrame interface {
+type DataFrameInterface interface {
 	// Returns true when data frame is fully captured
 	IsFullFrame() bool
 	// Decodes captured data frame
 	Decode(receiver interface{}) error
 	// Capture data stream into a data frame
-	Capture(buf []byte)
+	Capture(buf []byte) error
 	// Returns data frame
 	GetFrame() []byte
 	// Resets frame capturing returning captured before data
 	Flush() []byte
 	// Converts data into a frame using gob encoding
-	ToFrame(data interface{}) []byte
+	ToFrame(data interface{}) ([]byte, error)
 }
 
-type dataFrame struct {
+type DataFrame struct {
 	buf      []byte
 	tail     int
 	tailbuf  []byte
@@ -39,16 +40,16 @@ type dataFrame struct {
 	framelen int
 }
 
-func NewDataFrame() *dataFrame {
-	df := &dataFrame{}
+func NewDataFrame() *DataFrame {
+	df := &DataFrame{}
 	return df
 }
 
-func (f *dataFrame) IsFullFrame() bool {
+func (f *DataFrame) IsFullFrame() bool {
 	return f.isFull
 }
 
-func (f *dataFrame) copy(data []byte) {
+func (f *DataFrame) copy(data []byte) {
 	n := copy(f.buf[f.tail:], data[0:])
 	f.tail += n
 	f.ncap += n
@@ -67,20 +68,18 @@ func (f *dataFrame) copy(data []byte) {
 	}
 }
 
-func (f *dataFrame) Capture(data []byte) {
+func (f *DataFrame) Capture(data []byte) error {
 	if f.isFull {
-		panic("data frame is full")
+		return errors.New("data frame is full")
 	}
-
 	// Capture one extra byte to grow tail by one
 	if len(f.tailbuf) + len(data) < ForewordLen + 1 && f.tail == 0 {
 		var buf bytes.Buffer
 		buf.Write(f.tailbuf)
 		buf.Write(data)
 		f.tailbuf = buf.Bytes()
-		return
+		return nil
 	}
-
 	// Copy the rest of data
 	if len(f.tailbuf) > 0 {
 		tmp := make([]byte, len(f.tailbuf) + len(data))
@@ -89,7 +88,7 @@ func (f *dataFrame) Capture(data []byte) {
 		data = tmp
 		f.tailbuf = nil
 	}
-
+	//
 	if f.tail == 0 && f.probe(data) {
 		// Calculate frame length and allocate data buffer
 		r := bytes.NewReader(data[MagicWordLen:MagicWordLen+DataFrameLen])
@@ -105,9 +104,10 @@ func (f *dataFrame) Capture(data []byte) {
 	} else {
 		f.buf = data
 	}
+	return nil
 }
 
-func (f *dataFrame) GetFrame() []byte {
+func (f *DataFrame) GetFrame() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.isFull = false
@@ -115,7 +115,7 @@ func (f *dataFrame) GetFrame() []byte {
 	return out
 }
 
-func (f *dataFrame) Decode(receiver interface{}) error {
+func (f *DataFrame) Decode(receiver interface{}) error {
 	if ! f.isFull {
 		panic("trying to decode incomplete data frame")
 	}
@@ -125,7 +125,7 @@ func (f *dataFrame) Decode(receiver interface{}) error {
 	return err
 }
 
-func (f *dataFrame) Flush() []byte {
+func (f *DataFrame) Flush() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.tail = 0
@@ -134,7 +134,7 @@ func (f *dataFrame) Flush() []byte {
 	return out
 }
 
-func (f *dataFrame) ToFrame(data interface{}) ([]byte, error) {
+func (f *DataFrame) ToFrame(data interface{}) ([]byte, error) {
 	var frame bytes.Buffer
 	// Encode frame data
 	enc := gob.NewEncoder(&frame)
@@ -155,7 +155,7 @@ func (f *dataFrame) ToFrame(data interface{}) ([]byte, error) {
 	return buf, nil
 }
 
-func (f *dataFrame) probe(buf []byte) bool {
+func (f *DataFrame) probe(buf []byte) bool {
 	if len(buf) < len(dataFrameMagicWord) { return false }
 
 	for i := 0; i < len(dataFrameMagicWord); i++ {
