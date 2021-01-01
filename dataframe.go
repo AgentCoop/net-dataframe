@@ -92,8 +92,7 @@ func (f *dataFrame) Capture(data []byte) {
 
 	if f.tail == 0 && f.probe(data) {
 		// Calculate frame length and allocate data buffer
-		mwl := len(dataFrameMagicWord)
-		r := bytes.NewReader(data[mwl:2*mwl])
+		r := bytes.NewReader(data[MagicWordLen:MagicWordLen+DataFrameLen])
 		var fl uint64
 
 		binary.Read(r, binary.BigEndian, &fl)
@@ -149,11 +148,10 @@ func (f *dataFrame) ToFrame(data interface{}) ([]byte, error) {
 	if err != nil { return nil, err }
 
 	// Compose data stream
-	mwl := len(dataFrameMagicWord)
-	buf := make([]byte, mwl + lbuf.Len() + frame.Len())
-	copy(buf[0:mwl], dataFrameMagicWord[:]) // data frame magic word
-	copy(buf[mwl:], lbuf.Bytes()) // length
-	copy(buf[mwl+lbuf.Len():], frame.Bytes()) // serialized data structure
+	buf := make([]byte, MagicWordLen + lbuf.Len() + frame.Len())
+	copy(buf[0:MagicWordLen], dataFrameMagicWord[:]) // data frame magic word
+	copy(buf[MagicWordLen:], lbuf.Bytes()) // length
+	copy(buf[MagicWordLen+lbuf.Len():], frame.Bytes()) // serialized data structure
 	return buf, nil
 }
 
