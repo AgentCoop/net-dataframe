@@ -9,6 +9,12 @@ import (
 // head -c 8 /dev/urandom | hexdump -C
 var dataFrameMagicWord = [...]byte{ 0xaa, 0xde, 0x07, 0xa6, 0x02, 0x57, 0xc2, 0xd0 }
 
+const (
+	MagicWordLen = len(dataFrameMagicWord)
+	DataFrameLen = 8
+	ForewordLen = MagicWordLen + DataFrameLen
+)
+
 type  DataFrame interface {
 	// Returns true when data frame is fully captured
 	IsFullFrame() bool
@@ -29,6 +35,7 @@ type dataFrame struct {
 	tail     int
 	tailbuf  []byte
 	isFull   bool
+	ncap	int
 	framelen int
 }
 
@@ -41,39 +48,61 @@ func (f *dataFrame) IsFullFrame() bool {
 	return f.isFull
 }
 
+func (f *dataFrame) copy(data []byte) {
+	n := copy(f.buf[f.tail:], data[0:])
+	f.tail += n
+	f.ncap += n
+	if f.tail == f.framelen {
+		rest := len(data) - n
+		if rest > 0 {
+			f.tailbuf = make([]byte, rest)
+			copy(f.tailbuf[0:], data[n:])
+			if len(f.tailbuf) > MagicWordLen && ! f.probe(f.tailbuf) {
+				panic("tail")
+			}
+			//f.tail = 0
+		}
+		f.isFull = true
+		f.tail = 0
+	}
+}
+
 func (f *dataFrame) Capture(data []byte) {
 	if f.isFull {
 		panic("data frame is full")
-	} else if f.tail == 0 && f.probe(data) {
+	}
+
+	// Capture one extra byte to grow tail by one
+	if len(f.tailbuf) + len(data) < ForewordLen + 1 && f.tail == 0 {
+		var buf bytes.Buffer
+		buf.Write(f.tailbuf)
+		buf.Write(data)
+		f.tailbuf = buf.Bytes()
+		return
+	}
+
+	// Copy the rest of data
+	if len(f.tailbuf) > 0 {
+		tmp := make([]byte, len(f.tailbuf) + len(data))
+		copy(tmp[0:], f.tailbuf[0:])
+		copy(tmp[len(f.tailbuf):], data[0:])
+		data = tmp
+		f.tailbuf = nil
+	}
+
+	if f.tail == 0 && f.probe(data) {
 		// Calculate frame length and allocate data buffer
 		mwl := len(dataFrameMagicWord)
 		r := bytes.NewReader(data[mwl:2*mwl])
 		var fl uint64
+
 		binary.Read(r, binary.BigEndian, &fl)
 		f.buf = make([]byte, fl)
 		f.framelen = int(fl)
 
-		// Copy the rest of data
-		if len(f.tailbuf) > 0 {
-			f.tail += copy(f.buf[0:], f.tailbuf[0:])
-			f.tailbuf = nil
-		}
-
-		// Copy new data
-		f.tail += copy(f.buf[f.tail:f.framelen], data[0+mwl+8:])
-		if f.tail == f.framelen {
-			f.isFull = true
-		}
+		f.copy(data[ForewordLen:])
 	} else if f.tail > 0 {
-		f.tail += copy(f.buf[f.tail:], data[0:])
-		if f.tail == f.framelen {
-			f.isFull = true
-			rest := len(data) - f.framelen
-			if rest > 0 {
-				f.tailbuf = make([]byte, rest)
-				copy(f.tailbuf[0:], data[f.tail:])
-			}
-		}
+		f.copy(data)
 	} else {
 		f.buf = data
 	}
@@ -83,6 +112,7 @@ func (f *dataFrame) GetFrame() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.isFull = false
+	f.tail = 0
 	return out
 }
 

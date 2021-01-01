@@ -2,10 +2,10 @@ package netdataframe_test
 
 import (
 	"bytes"
+	"time"
 	netdataframe "github.com/AgentCoop/net-dataframe"
 	"math/rand"
 	"testing"
-	"time"
 )
 
 const (
@@ -76,7 +76,8 @@ func transferPayload(input ...*Payload) []*Payload {
 
 	var j int
 	for i := 0; i < len(pivots) - 1; i++ {
-		df.Capture(data[pivots[i]:pivots[i+1]])
+		chunk := data[pivots[i]:pivots[i+1]]
+		df.Capture(chunk)
 		if df.IsFullFrame() {
 			recvPayload := &Payload{}
 			err := df.Decode(recvPayload)
@@ -89,7 +90,12 @@ func transferPayload(input ...*Payload) []*Payload {
 	return output
 }
 
+var counter int
+
 func testPayload(t *testing.T, sendp *Payload, recvp *Payload) {
+	if sendp == nil || recvp == nil {
+		t.Fatalf("nil pointer")
+	}
 	if sendp.A != recvp.A {
 		t.Fatalf("expected A %d, got %d\n", sendp.A, recvp.A)
 	}
@@ -112,19 +118,20 @@ func testPayload(t *testing.T, sendp *Payload, recvp *Payload) {
 	}
 }
 
-func testSuite(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			breakpoint := 0
-			breakpoint++
-		}
-	}()
+func testSuite(t *testing.T, i int) {
+	//defer func() {
+	//	if r := recover(); r != nil {
+	//		breakpoint := 0
+	//		breakpoint++
+	//	}
+	//}()
 
 	p1 := generatePayload()
 	p2 := generatePayload()
 	p3 := generatePayload()
 	p4 := generatePayload()
 	r := transferPayload(p1, p2, p3, p4)
+
 	testPayload(t, p1, r[0])
 	testPayload(t, p2, r[1])
 	testPayload(t, p3, r[2])
@@ -133,7 +140,7 @@ func testSuite(t *testing.T) {
 
 func Test_DataFrame(t *testing.T) {
 	rand.Seed(time.Now().UTC().UnixNano())
-	for i := 0; i < 3000; i++ {
-		testSuite(t)
+	for counter = 0; counter < 5000; counter++ {
+		testSuite(t, counter)
 	}
 }

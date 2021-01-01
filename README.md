@@ -56,6 +56,7 @@ type DataFrame interface {
     df.Capture(readbuf[0:n])
     if df.IsFullFrame() {
         // Say hello
+        req := &Request{}
         err := df.Decode(req)
         if err != nil { panic(err) }
         fmt.Printf(req.msg) // hello
