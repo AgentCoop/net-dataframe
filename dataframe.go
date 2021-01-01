@@ -36,7 +36,6 @@ type DataFrame struct {
 	tail     int
 	tailbuf  []byte
 	isFull   bool
-	ncap	int
 	framelen int
 }
 
@@ -52,16 +51,11 @@ func (f *DataFrame) IsFullFrame() bool {
 func (f *DataFrame) copy(data []byte) {
 	n := copy(f.buf[f.tail:], data[0:])
 	f.tail += n
-	f.ncap += n
 	if f.tail == f.framelen {
 		rest := len(data) - n
 		if rest > 0 {
 			f.tailbuf = make([]byte, rest)
 			copy(f.tailbuf[0:], data[n:])
-			if len(f.tailbuf) > MagicWordLen && ! f.probe(f.tailbuf) {
-				panic("tail")
-			}
-			//f.tail = 0
 		}
 		f.isFull = true
 		f.tail = 0
