@@ -33,7 +33,7 @@ type DataFrameInterface interface {
 
 type DataFrame struct {
 	buf      []byte
-	tail     int
+	head     int
 	tailbuf  []byte
 	isFull   bool
 	framelen int
@@ -49,16 +49,16 @@ func (f *DataFrame) IsFullFrame() bool {
 }
 
 func (f *DataFrame) copy(data []byte) {
-	n := copy(f.buf[f.tail:], data[0:])
-	f.tail += n
-	if f.tail == f.framelen {
+	n := copy(f.buf[f.head:], data[0:])
+	f.head += n
+	if f.head == f.framelen {
 		rest := len(data) - n
 		if rest > 0 {
 			f.tailbuf = make([]byte, rest)
 			copy(f.tailbuf[0:], data[n:])
 		}
 		f.isFull = true
-		f.tail = 0
+		f.head = 0
 	}
 }
 
@@ -66,15 +66,15 @@ func (f *DataFrame) Capture(data []byte) error {
 	if f.isFull {
 		return errors.New("data frame is full")
 	}
-	// Capture one extra byte to grow tail by one
-	if len(f.tailbuf) + len(data) < ForewordLen + 1 && f.tail == 0 {
+	// Capture foreword plus one extra byte to move frame head
+	if len(f.tailbuf) + len(data) < ForewordLen + 1 && f.head == 0 {
 		var buf bytes.Buffer
 		buf.Write(f.tailbuf)
 		buf.Write(data)
 		f.tailbuf = buf.Bytes()
 		return nil
 	}
-	// Copy the rest of data
+	// Flush tail buffer
 	if len(f.tailbuf) > 0 {
 		tmp := make([]byte, len(f.tailbuf) + len(data))
 		copy(tmp[0:], f.tailbuf[0:])
@@ -83,7 +83,7 @@ func (f *DataFrame) Capture(data []byte) error {
 		f.tailbuf = nil
 	}
 	//
-	if f.tail == 0 && f.probe(data) {
+	if f.head == 0 && f.probe(data) {
 		// Calculate frame length and allocate data buffer
 		r := bytes.NewReader(data[MagicWordLen:MagicWordLen+DataFrameLen])
 		var fl uint64
@@ -93,7 +93,7 @@ func (f *DataFrame) Capture(data []byte) error {
 		f.framelen = int(fl)
 
 		f.copy(data[ForewordLen:])
-	} else if f.tail > 0 {
+	} else if f.head > 0 {
 		f.copy(data)
 	} else {
 		f.buf = data
@@ -105,13 +105,13 @@ func (f *DataFrame) GetFrame() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.isFull = false
-	f.tail = 0
+	f.head = 0
 	return out
 }
 
 func (f *DataFrame) Decode(receiver interface{}) error {
 	if ! f.isFull {
-		panic("trying to decode incomplete data frame")
+		return errors.New("trying to decode incomplete data frame")
 	}
 	buf := bytes.NewBuffer(f.GetFrame())
 	dec := gob.NewDecoder(buf)
@@ -122,7 +122,7 @@ func (f *DataFrame) Decode(receiver interface{}) error {
 func (f *DataFrame) Flush() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
-	f.tail = 0
+	f.head = 0
 	f.tailbuf = nil
 	f.isFull = false
 	return out
