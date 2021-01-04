@@ -6,7 +6,7 @@ facilitate that.
 
 ### API
 ```go
-type DataFrameInterface interface {
+type DataFrame interface {
     // Returns true when data frame is fully captured 
     IsFullFrame() bool
 

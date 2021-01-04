@@ -7,8 +7,14 @@ import (
 	"errors"
 )
 
-// head -c 8 /dev/urandom | hexdump -C
-var dataFrameMagicWord = [...]byte{ 0xaa, 0xde, 0x07, 0xa6, 0x02, 0x57, 0xc2, 0xd0 }
+var (
+	// head -c 8 /dev/urandom | hexdump -C
+	dataFrameMagicWord = [...]byte{ 0xaa, 0xde, 0x07, 0xa6, 0x02, 0x57, 0xc2, 0xd0 }
+
+	errIncompleteFrame = errors.New("trying to decode incomplete data frame")
+
+	errFrameFull = errors.New("data frame is full")
+)
 
 const (
 	MagicWordLen = len(dataFrameMagicWord)
@@ -16,7 +22,7 @@ const (
 	ForewordLen = MagicWordLen + DataFrameLen
 )
 
-type DataFrameInterface interface {
+type DataFrame interface {
 	// Returns true when data frame is fully captured
 	IsFullFrame() bool
 	// Decodes captured data frame
@@ -31,7 +37,7 @@ type DataFrameInterface interface {
 	ToFrame(data interface{}) ([]byte, error)
 }
 
-type DataFrame struct {
+type dataFrame struct {
 	buf      []byte
 	head     int
 	tailbuf  []byte
@@ -39,16 +45,16 @@ type DataFrame struct {
 	framelen int
 }
 
-func NewDataFrame() *DataFrame {
-	df := &DataFrame{}
+func NewDataFrame() *dataFrame {
+	df := &dataFrame{}
 	return df
 }
 
-func (f *DataFrame) IsFullFrame() bool {
+func (f *dataFrame) IsFullFrame() bool {
 	return f.isFull
 }
 
-func (f *DataFrame) copy(data []byte) {
+func (f *dataFrame) copy(data []byte) {
 	n := copy(f.buf[f.head:], data[0:])
 	f.head += n
 	if f.head == f.framelen {
@@ -62,9 +68,9 @@ func (f *DataFrame) copy(data []byte) {
 	}
 }
 
-func (f *DataFrame) Capture(data []byte) error {
+func (f *dataFrame) Capture(data []byte) error {
 	if f.isFull {
-		return errors.New("data frame is full")
+		return errFrameFull
 	}
 	// Capture foreword plus one extra byte to move frame head
 	if len(f.tailbuf) + len(data) < ForewordLen + 1 && f.head == 0 {
@@ -101,7 +107,7 @@ func (f *DataFrame) Capture(data []byte) error {
 	return nil
 }
 
-func (f *DataFrame) GetFrame() []byte {
+func (f *dataFrame) GetFrame() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.isFull = false
@@ -109,9 +115,9 @@ func (f *DataFrame) GetFrame() []byte {
 	return out
 }
 
-func (f *DataFrame) Decode(receiver interface{}) error {
+func (f *dataFrame) Decode(receiver interface{}) error {
 	if ! f.isFull {
-		return errors.New("trying to decode incomplete data frame")
+		return errIncompleteFrame
 	}
 	buf := bytes.NewBuffer(f.GetFrame())
 	dec := gob.NewDecoder(buf)
@@ -119,7 +125,7 @@ func (f *DataFrame) Decode(receiver interface{}) error {
 	return err
 }
 
-func (f *DataFrame) Flush() []byte {
+func (f *dataFrame) Flush() []byte {
 	out := make([]byte, len(f.buf))
 	copy(out[0:], f.buf[0:])
 	f.head = 0
@@ -128,7 +134,7 @@ func (f *DataFrame) Flush() []byte {
 	return out
 }
 
-func (f *DataFrame) ToFrame(data interface{}) ([]byte, error) {
+func (f *dataFrame) ToFrame(data interface{}) ([]byte, error) {
 	var frame bytes.Buffer
 	// Encode frame data
 	enc := gob.NewEncoder(&frame)
@@ -149,7 +155,7 @@ func (f *DataFrame) ToFrame(data interface{}) ([]byte, error) {
 	return buf, nil
 }
 
-func (f *DataFrame) probe(buf []byte) bool {
+func (f *dataFrame) probe(buf []byte) bool {
 	if len(buf) < len(dataFrameMagicWord) { return false }
 
 	for i := 0; i < len(dataFrameMagicWord); i++ {
