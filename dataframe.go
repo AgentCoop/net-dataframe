@@ -36,6 +36,15 @@ type receiver struct {
 	framelen int
 }
 
+func (r *receiver) IsEmpty() bool {
+	switch {
+	case len(r.tailbuf) > 0, len(r.buf) > 0:
+		return false
+	default:
+		return true
+	}
+}
+
 func (r *receiver) copy(data []byte) {
 	n := copy(r.buf[r.head:], data[0:])
 	r.head += n
@@ -53,7 +62,7 @@ func (recv *receiver) capture(data []byte) error {
 	if recv.isFull {
 		return ErrFrameFull
 	}
-	// capture foreword plus one extra byte to move frame head
+	// Capture foreword plus one extra byte to move frame head pointer by one to indicate that capturing has begun
 	if len(recv.tailbuf) + len(data) < ForewordLen + 1 && recv.head == 0 {
 		var buf bytes.Buffer
 		buf.Write(recv.tailbuf)
@@ -101,7 +110,7 @@ func (r *receiver) Capture(data []byte) ([]*dataFrame, error) {
 	frames := make([]*dataFrame, 0)
 	err := r.capture(data)
 	if err != nil { return nil, err }
-	empty := []byte{}
+	var empty []byte = nil
 	for r.isFull {
 		frames = append(frames, r.getFrame())
 		err := r.capture(empty) // read from the tail buffer

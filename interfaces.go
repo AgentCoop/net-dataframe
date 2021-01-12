@@ -5,6 +5,8 @@ type Receiver interface {
 	Capture(buf []byte) ([]*dataFrame, error)
 	// Resets frame capturing returning captured before data
 	Flush() []byte
+	// Returns true if no data were captured
+	IsEmpty() bool
 }
 
 type Sender interface {
