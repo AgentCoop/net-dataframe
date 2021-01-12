@@ -24,7 +24,7 @@ type Payload struct {
 }
 
 var (
-	df = netdataframe.NewDataFrame()
+	recv = netdataframe.NewReceiver()
 	randomStr1 string = "Hello, World!"
 )
 
@@ -55,9 +55,9 @@ func transferPayload(input ...*Payload) []*Payload {
 	output := make([]*Payload, len(input))
 
 	for _, p := range input {
-		df, err := df.ToFrame(p)
+		frame, err := netdataframe.ToFrame(p)
 		if err != nil { panic(err) }
-		b.Write(df)
+		b.Write(frame.GetBytes())
 	}
 
 	// Split data in chunks of variable length to simulate network data transmission
@@ -77,10 +77,12 @@ func transferPayload(input ...*Payload) []*Payload {
 	var j int
 	for i := 0; i < len(pivots) - 1; i++ {
 		chunk := data[pivots[i]:pivots[i+1]]
-		df.Capture(chunk)
-		if df.IsFullFrame() {
+		frames, err := recv.Capture(chunk)
+		if err != nil { panic(err) }
+
+		for _, frame := range frames {
 			recvPayload := &Payload{}
-			err := df.Decode(recvPayload)
+			err := frame.Decode(recvPayload)
 			if err != nil { panic(err) }
 			output[j] = recvPayload
 			j++
